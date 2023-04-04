@@ -19,6 +19,7 @@ var config struct {
 	certDir          string
 	leaderElectionID string
 	skipNodeFinalize bool
+	affinityKey      string
 	zapOpts          zap.Options
 }
 
@@ -53,6 +54,7 @@ func init() {
 	fs.StringVar(&config.certDir, "cert-dir", "", "certificate directory")
 	fs.StringVar(&config.leaderElectionID, "leader-election-id", "topolvm", "ID for leader election by controller-runtime")
 	fs.BoolVar(&config.skipNodeFinalize, "skip-node-finalize", false, "skips automatic cleanup of PhysicalVolumeClaims when a Node is deleted")
+	fs.StringVar(&config.affinityKey, "affinity-key", topolvm.GetTopologyNodeKey(), "affinity key to use in PV")
 
 	goflags := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(goflags)

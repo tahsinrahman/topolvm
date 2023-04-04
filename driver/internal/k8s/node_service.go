@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/topolvm/topolvm"
@@ -13,6 +14,7 @@ import (
 // ErrNodeNotFound represents the error that node is not found.
 var ErrNodeNotFound = errors.New("node not found")
 var ErrDeviceClassNotFound = errors.New("device class not found")
+var ErrLabelNotSet = errors.New("label not set")
 
 // NodeService represents node service.
 type NodeService struct {
@@ -106,4 +108,19 @@ func (s NodeService) GetMaxCapacity(ctx context.Context, deviceClass string) (st
 		}
 	}
 	return nodeName, maxCapacity, nil
+}
+
+// GetAffinityKeyValue returns the value of the specified node label key.
+func (s NodeService) GetAffinityKeyValue(ctx context.Context, node, key string) (string, error) {
+	n := new(corev1.Node)
+	err := s.reader.Get(ctx, client.ObjectKey{Name: node}, n)
+	if err != nil {
+		return "", fmt.Errorf("failed to get node %s: %w", node, err)
+	}
+
+	if v, ok := n.Labels[key]; ok {
+		return v, nil
+	}
+
+	return "", ErrLabelNotSet
 }

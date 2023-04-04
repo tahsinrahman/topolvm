@@ -21,7 +21,7 @@ import (
 var ctrlLogger = ctrl.Log.WithName("driver").WithName("controller")
 
 // NewControllerServer returns a new ControllerServer.
-func NewControllerServer(mgr manager.Manager) (csi.ControllerServer, error) {
+func NewControllerServer(mgr manager.Manager, affinityKey string) (csi.ControllerServer, error) {
 	lvService, err := k8s.NewLogicalVolumeService(mgr)
 	if err != nil {
 		return nil, err
@@ -31,6 +31,7 @@ func NewControllerServer(mgr manager.Manager) (csi.ControllerServer, error) {
 		lockByName:     NewLockWithID(),
 		lockByVolumeID: NewLockWithID(),
 		server: &controllerServerNoLocked{
+			affinityKey: affinityKey,
 			lvService:   lvService,
 			nodeService: k8s.NewNodeService(mgr.GetClient()),
 		},
@@ -107,6 +108,7 @@ func (s *controllerServer) ControllerExpandVolume(ctx context.Context, req *csi.
 type controllerServerNoLocked struct {
 	csi.UnimplementedControllerServer
 
+	affinityKey string
 	lvService   *k8s.LogicalVolumeService
 	nodeService *k8s.NodeService
 }
@@ -275,6 +277,11 @@ func (s controllerServerNoLocked) CreateVolume(ctx context.Context, req *csi.Cre
 
 	name = strings.ToLower(name)
 
+	affinityValue, err := s.nodeService.GetAffinityKeyValue(ctx, node, s.affinityKey)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+
 	volumeID, err := s.lvService.CreateVolume(ctx, node, deviceClass, lvcreateOptionClass, name, sourceName, requestGb)
 	if err != nil {
 		_, ok := status.FromError(err)
@@ -291,7 +298,7 @@ func (s controllerServerNoLocked) CreateVolume(ctx context.Context, req *csi.Cre
 			ContentSource: source,
 			AccessibleTopology: []*csi.Topology{
 				{
-					Segments: map[string]string{topolvm.GetTopologyNodeKey(): node},
+					Segments: map[string]string{s.affinityKey: affinityValue},
 				},
 			},
 		},
