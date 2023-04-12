@@ -50,9 +50,11 @@ func init() {
 	fs.StringVar(&config.lvmdSocket, "lvmd-socket", topolvm.DefaultLVMdSocket, "UNIX domain socket of lvmd service")
 	fs.StringVar(&config.metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	fs.String("nodename", "", "The resource name of the running node")
+	fs.String("affinity-key", topolvm.GetTopologyNodeKey(), "The key of the node label to be used for topology-aware scheduling")
 
 	viper.BindEnv("nodename", "NODE_NAME")
 	viper.BindPFlag("nodename", fs.Lookup("nodename"))
+	viper.BindPFlag("affinity-key", fs.Lookup("affinity-key"))
 
 	goflags := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(goflags)

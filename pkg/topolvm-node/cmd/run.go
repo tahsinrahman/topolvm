@@ -99,7 +99,9 @@ func subMain() error {
 	}
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(ErrorLoggingInterceptor))
 	csi.RegisterIdentityServer(grpcServer, driver.NewIdentityServer(checker.Ready))
-	nodeServer, err := driver.NewNodeServer(nodename, conn, mgr)
+
+	affinityKey := viper.GetString("affinity-key")
+	nodeServer, err := driver.NewNodeServer(nodename, conn, mgr, affinityKey)
 	if err != nil {
 		return err
 	}

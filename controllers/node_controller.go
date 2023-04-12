@@ -22,13 +22,15 @@ import (
 type NodeReconciler struct {
 	client           client.Client
 	skipNodeFinalize bool
+	affinityKey      string
 }
 
 // NewNodeReconciler returns NodeReconciler.
-func NewNodeReconciler(client client.Client, skipNodeFinalize bool) *NodeReconciler {
+func NewNodeReconciler(client client.Client, skipNodeFinalize bool, affinityKey string) *NodeReconciler {
 	return &NodeReconciler{
 		client:           client,
 		skipNodeFinalize: skipNodeFinalize,
+		affinityKey:      affinityKey,
 	}
 }
 
@@ -52,7 +54,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if node.DeletionTimestamp == nil {
-		return ctrl.Result{}, nil
+		return r.reconcileLV(ctx, node)
 	}
 
 	if !controllerutil.ContainsFinalizer(node, topolvm.GetNodeFinalizer()) {
@@ -69,6 +71,27 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if err := r.client.Patch(ctx, node2, patch); err != nil {
 		log.Error(err, "failed to remove finalizer", "name", node.Name)
 		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *NodeReconciler) reconcileLV(ctx context.Context, node *corev1.Node) (ctrl.Result, error) {
+	var lvList topolvmv1.LogicalVolumeList
+	err := r.client.List(ctx, &lvList, client.MatchingLabels{r.affinityKey: node.Labels[r.affinityKey]})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	for _, lv := range lvList.Items {
+		if lv.Spec.NodeName == node.Name {
+			continue
+		}
+
+		lv.Spec.NodeName = node.Name
+		if err := r.client.Update(ctx, &lv); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil

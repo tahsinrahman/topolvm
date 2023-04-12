@@ -22,7 +22,7 @@ var ctrlLogger = ctrl.Log.WithName("driver").WithName("controller")
 
 // NewControllerServer returns a new ControllerServer.
 func NewControllerServer(mgr manager.Manager, affinityKey string) (csi.ControllerServer, error) {
-	lvService, err := k8s.NewLogicalVolumeService(mgr)
+	lvService, err := k8s.NewLogicalVolumeService(mgr, affinityKey)
 	if err != nil {
 		return nil, err
 	}

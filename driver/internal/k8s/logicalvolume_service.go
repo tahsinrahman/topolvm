@@ -19,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // ErrVolumeNotFound represents the specified volume is not found.
@@ -33,6 +34,7 @@ type LogicalVolumeService struct {
 	}
 	getter       getter.Interface
 	volumeGetter *volumeGetter
+	affinityKey  string
 }
 
 const (
@@ -122,7 +124,7 @@ func (v *volumeGetter) Get(ctx context.Context, volumeID string) (*topolvmv1.Log
 //+kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
 // NewLogicalVolumeService returns LogicalVolumeService.
-func NewLogicalVolumeService(mgr manager.Manager) (*LogicalVolumeService, error) {
+func NewLogicalVolumeService(mgr manager.Manager, affinityKey string) (*LogicalVolumeService, error) {
 	ctx := context.Background()
 	if topolvm.UseLegacy() {
 		err := mgr.GetFieldIndexer().IndexField(ctx, &topolvmlegacyv1.LogicalVolume{}, indexFieldVolumeID, func(o client.Object) []string {
@@ -146,6 +148,7 @@ func NewLogicalVolumeService(mgr manager.Manager) (*LogicalVolumeService, error)
 		writer:       client,
 		getter:       newRetryMissingGetter(client, apiReader),
 		volumeGetter: &volumeGetter{cacheReader: client, apiReader: apiReader},
+		affinityKey:  affinityKey,
 	}, nil
 }
 
@@ -185,6 +188,21 @@ func (s *LogicalVolumeService) CreateVolume(ctx context.Context, node, dc, oc, n
 			},
 		}
 	}
+
+	// get the node object
+	nodeObj := &corev1.Node{}
+	if err := s.getter.Get(ctx, client.ObjectKey{Name: node}, nodeObj); err != nil {
+		return "", fmt.Errorf("failed to get node %s: %w", node, err)
+	}
+
+	// get the value of the affinity key
+	affinityValue, ok := nodeObj.Labels[s.affinityKey]
+	if !ok {
+		return "", fmt.Errorf("node %s does not have label %s", node, s.affinityKey)
+	}
+
+	// set the affinity label
+	lv.Labels = map[string]string{s.affinityKey: affinityValue}
 
 	existingLV := new(topolvmv1.LogicalVolume)
 	err := s.getter.Get(ctx, client.ObjectKey{Name: name}, existingLV)
